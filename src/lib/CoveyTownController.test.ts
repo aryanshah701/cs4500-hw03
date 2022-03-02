@@ -515,56 +515,371 @@ describe('CoveyTownController', () => {
   });
   describe('updatePlayerLocation', () => {
     let testingTown: CoveyTownController;
-    beforeEach(() => {
+    let player: Player;
+
+    beforeEach(async () => {
       const townName = `updatePlayerLocation test town ${nanoid()}`;
       testingTown = new CoveyTownController(townName, false);
+      const playerSession = await TestUtils.addPlayerToTown(testingTown);
+      player = playerSession.player;
     });
-    it("should respect the conversation area reported by the player userLocation.conversationLabel, and not override it based on the player's x,y location", async () => {
-      const newConversationArea = TestUtils.createConversationForTesting({
-        boundingBox: { x: 10, y: 10, height: 5, width: 5 },
-      });
-      const result = testingTown.addConversationArea(newConversationArea);
-      expect(result).toBe(true);
-      const player = new Player(nanoid());
-      await testingTown.addPlayer(player);
 
+    it("should update the player's coords", () => {
       const newLocation: UserLocation = {
         moving: false,
         rotation: 'front',
         x: 25,
         y: 25,
-        conversationLabel: newConversationArea.label,
       };
-      testingTown.updatePlayerLocation(player, newLocation);
-      expect(player.activeConversationArea?.label).toEqual(newConversationArea.label);
-      expect(player.activeConversationArea?.topic).toEqual(newConversationArea.topic);
-      expect(player.activeConversationArea?.boundingBox).toEqual(newConversationArea.boundingBox);
 
-      const areas = testingTown.conversationAreas;
-      expect(areas[0].occupantsByID.length).toBe(1);
-      expect(areas[0].occupantsByID[0]).toBe(player.id);
+      testingTown.updatePlayerLocation(player, newLocation);
+
+      const playerLocation = player.location;
+
+      expect(playerLocation.x).toBe(newLocation.x);
+      expect(playerLocation.y).toBe(newLocation.y);
+      expect(playerLocation.rotation).toBe(newLocation.rotation);
+      expect(playerLocation.rotation).toBe(newLocation.rotation);
     });
-    it('should emit an onConversationUpdated event when a conversation area gets a new occupant', async () => {
-      const newConversationArea = TestUtils.createConversationForTesting({
-        boundingBox: { x: 10, y: 10, height: 5, width: 5 },
+
+    describe('impact on conversation area', () => {
+      const mockListeners = [
+        mock<CoveyTownListener>(),
+        mock<CoveyTownListener>(),
+        mock<CoveyTownListener>(),
+      ];
+
+      beforeEach(() => {
+        const newLocation = TestUtils.userLocation({ x: 10, y: 10 });
+        testingTown.updatePlayerLocation(player, newLocation);
+        mockListeners.forEach(mockReset);
       });
-      const result = testingTown.addConversationArea(newConversationArea);
-      expect(result).toBe(true);
 
-      const mockListener = mock<CoveyTownListener>();
-      testingTown.addTownListener(mockListener);
+      it("should respect the conversation area reported by the player userLocation.conversationLabel, and not override it based on the player's x,y location", async () => {
+        const newConversationArea = TestUtils.createConversationForTesting({
+          boundingBox: { x: 10, y: 10, height: 5, width: 5 },
+        });
+        const result = testingTown.addConversationArea(newConversationArea);
+        expect(result).toBe(true);
 
-      const player = new Player(nanoid());
-      await testingTown.addPlayer(player);
-      const newLocation: UserLocation = {
-        moving: false,
-        rotation: 'front',
-        x: 25,
-        y: 25,
-        conversationLabel: newConversationArea.label,
-      };
-      testingTown.updatePlayerLocation(player, newLocation);
-      expect(mockListener.onConversationAreaUpdated).toHaveBeenCalledTimes(1);
+        const newLocation = TestUtils.userLocation({
+          x: 25,
+          y: 25,
+          conversationLabel: newConversationArea.label,
+        });
+        testingTown.updatePlayerLocation(player, newLocation);
+        expect(player.activeConversationArea?.label).toEqual(newConversationArea.label);
+        expect(player.activeConversationArea?.topic).toEqual(newConversationArea.topic);
+        expect(player.activeConversationArea?.boundingBox).toEqual(newConversationArea.boundingBox);
+
+        const areas = testingTown.conversationAreas;
+        expect(areas[0].occupantsByID.length).toBe(1);
+        expect(areas[0].occupantsByID[0]).toBe(player.id);
+      });
+
+      describe('player goes from one conversation area to another', () => {
+        let oldConversationArea: ServerConversationArea;
+        let newConversationArea: ServerConversationArea;
+
+        beforeEach(async () => {
+          // add another player to the old conversation area so that it doesn't
+          // get deleted when player 1 leaves
+          const { player: player2 } = await TestUtils.addPlayerToTown(testingTown);
+          const player2Location = TestUtils.userLocation({ x: 9, y: 9 });
+          testingTown.updatePlayerLocation(player2, player2Location);
+
+          // add a conversation area on top of 2 player's position
+          const oldConversationAreaBox = { x: 10, y: 10, height: 5, width: 5 };
+          oldConversationArea = TestUtils.createConversationForTesting({
+            boundingBox: oldConversationAreaBox,
+          });
+          const isOldConversationAreaAdded = testingTown.addConversationArea(oldConversationArea);
+          expect(isOldConversationAreaAdded).toBe(true);
+          expect(oldConversationArea.occupantsByID).toHaveLength(2);
+
+          // add another conversation area
+          const newConversationAreaBox = { x: 100, y: 100, height: 5, width: 5 };
+          newConversationArea = TestUtils.createConversationForTesting({
+            boundingBox: newConversationAreaBox,
+          });
+          const isNewConversationAreaAdded = testingTown.addConversationArea(newConversationArea);
+          expect(isNewConversationAreaAdded).toBe(true);
+        });
+
+        it("should update the player's active conversation area", async () => {
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ conversationLabel: newConversationArea.label }),
+          );
+          expect(player.activeConversationArea).toBe(newConversationArea);
+        });
+
+        it('should add the player to the occupant list of the new conversation area', async () => {
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ conversationLabel: newConversationArea.label }),
+          );
+          expect(newConversationArea.occupantsByID).toHaveLength(1);
+          expect(newConversationArea.occupantsByID).toContain(player.id);
+        });
+
+        it('should remove the player to the occupant list of the old conversation area', async () => {
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ conversationLabel: newConversationArea.label }),
+          );
+          expect(oldConversationArea.occupantsByID).toHaveLength(1);
+          expect(oldConversationArea.occupantsByID).not.toContain(player.id);
+        });
+
+        it('should emit onConversationUpdate events for both conversation areas', async () => {
+          mockListeners.forEach(listener => {
+            testingTown.addTownListener(listener);
+          });
+
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ conversationLabel: newConversationArea.label }),
+          );
+
+          mockListeners.forEach(listener => {
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledTimes(2);
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledWith(newConversationArea);
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledWith(oldConversationArea);
+            expect(listener.onConversationAreaDestroyed).toHaveBeenCalledTimes(0);
+          });
+        });
+      });
+
+      describe('player goes from one conversation area to no conversation area', () => {
+        let oldConversationArea: ServerConversationArea;
+
+        beforeEach(async () => {
+          // add another player to the old conversation area so that it doesn't
+          // get deleted when player 1 leaves
+          const { player: player2 } = await TestUtils.addPlayerToTown(testingTown);
+          const player2Location = TestUtils.userLocation({ x: 9, y: 9 });
+          testingTown.updatePlayerLocation(player2, player2Location);
+
+          // add a conversation area on top of 2 player's position
+          const oldConversationAreaBox = { x: 10, y: 10, height: 5, width: 5 };
+          oldConversationArea = TestUtils.createConversationForTesting({
+            boundingBox: oldConversationAreaBox,
+          });
+          const isOldConversationAreaAdded = testingTown.addConversationArea(oldConversationArea);
+          expect(isOldConversationAreaAdded).toBe(true);
+          expect(oldConversationArea.occupantsByID).toHaveLength(2);
+        });
+
+        it("should update the player's active conversation area to undef", async () => {
+          testingTown.updatePlayerLocation(player, TestUtils.userLocation({}));
+          expect(player.activeConversationArea).not.toBeDefined();
+        });
+
+        it('should remove the player from the occupant list of the old conversation area', async () => {
+          testingTown.updatePlayerLocation(player, TestUtils.userLocation({}));
+          expect(oldConversationArea.occupantsByID).toHaveLength(1);
+          expect(oldConversationArea.occupantsByID).not.toContain(player.id);
+        });
+
+        it('should emit onConversationUpdate event for the old conversation area', async () => {
+          mockListeners.forEach(listener => {
+            testingTown.addTownListener(listener);
+          });
+
+          testingTown.updatePlayerLocation(player, TestUtils.userLocation({}));
+
+          mockListeners.forEach(listener => {
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledTimes(1);
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledWith(oldConversationArea);
+            expect(listener.onConversationAreaDestroyed).toHaveBeenCalledTimes(0);
+          });
+        });
+      });
+
+      describe('player goes from no conversation area to a conversation area', () => {
+        let newConversationArea: ServerConversationArea;
+
+        beforeEach(async () => {
+          // add a conversation area
+          const newConversationAreaBox = { x: 100, y: 100, height: 5, width: 5 };
+          newConversationArea = TestUtils.createConversationForTesting({
+            boundingBox: newConversationAreaBox,
+          });
+          const isNewConversationAreaAdded = testingTown.addConversationArea(newConversationArea);
+          expect(isNewConversationAreaAdded).toBe(true);
+        });
+
+        it("should update the player's active conversation area to the new conversation area", async () => {
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ conversationLabel: newConversationArea.label }),
+          );
+
+          expect(player.activeConversationArea).toBe(newConversationArea);
+        });
+
+        it('should add the player to the occupant list of the new conversation area', async () => {
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ conversationLabel: newConversationArea.label }),
+          );
+
+          expect(newConversationArea.occupantsByID).toHaveLength(1);
+          expect(newConversationArea.occupantsByID).toContain(player.id);
+        });
+
+        it('should emit onConversationUpdate only for the new conversation area', async () => {
+          mockListeners.forEach(listener => {
+            testingTown.addTownListener(listener);
+          });
+
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ conversationLabel: newConversationArea.label }),
+          );
+
+          mockListeners.forEach(listener => {
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledTimes(1);
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledWith(newConversationArea);
+            expect(listener.onConversationAreaDestroyed).toHaveBeenCalledTimes(0);
+          });
+        });
+      });
+
+      describe('player goes from no conversation area to no conversation area', () => {
+        beforeEach(async () => {
+          // add a few conversation areas
+          TestUtils.addConversationAreaToTown(testingTown, { x: 20, y: 10, width: 5, height: 5 });
+          TestUtils.addConversationAreaToTown(testingTown, { x: 30, y: 10, width: 5, height: 5 });
+          TestUtils.addConversationAreaToTown(testingTown, { x: 40, y: 10, width: 5, height: 5 });
+        });
+
+        it("should have no effect on the player's active conversation area", async () => {
+          testingTown.updatePlayerLocation(player, TestUtils.userLocation({}));
+          expect(player.activeConversationArea).not.toBeDefined();
+        });
+
+        it('should have no effect on the occupant list of any of the conversation areas', async () => {
+          testingTown.updatePlayerLocation(player, TestUtils.userLocation({}));
+          testingTown.conversationAreas.forEach(area => {
+            expect(area.occupantsByID).toHaveLength(0);
+          });
+        });
+
+        it('should not emit any onConversationUpdate events', async () => {
+          mockListeners.forEach(listener => {
+            testingTown.addTownListener(listener);
+          });
+
+          testingTown.updatePlayerLocation(player, TestUtils.userLocation({}));
+
+          mockListeners.forEach(listener => {
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledTimes(0);
+            expect(listener.onConversationAreaDestroyed).toHaveBeenCalledTimes(0);
+          });
+        });
+      });
+
+      describe('player stays in the same conversation area', () => {
+        let conversationArea: ServerConversationArea;
+
+        beforeEach(async () => {
+          // add a conversation area on top of player's position
+          const conversationAreaBox = { x: 10, y: 10, height: 5, width: 5 };
+          conversationArea = TestUtils.createConversationForTesting({
+            boundingBox: conversationAreaBox,
+          });
+          const isConversationAreaAdded = testingTown.addConversationArea(conversationArea);
+          expect(isConversationAreaAdded).toBe(true);
+          expect(conversationArea.occupantsByID).toHaveLength(1);
+
+          // add multiple other conversation areas
+          TestUtils.addConversationAreaToTown(testingTown, { x: 20, y: 10, width: 5, height: 5 });
+          TestUtils.addConversationAreaToTown(testingTown, { x: 30, y: 10, width: 5, height: 5 });
+          TestUtils.addConversationAreaToTown(testingTown, { x: 40, y: 10, width: 5, height: 5 });
+        });
+
+        it("should have no effect on the player's active conversation area", async () => {
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ x: 12, y: 12, conversationLabel: conversationArea.label }),
+          );
+          expect(player.activeConversationArea).toBe(conversationArea);
+        });
+
+        it('should have no effect on the occupant list of any of the conversation areas', async () => {
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ x: 12, y: 12, conversationLabel: conversationArea.label }),
+          );
+
+          testingTown.conversationAreas.forEach(area => {
+            if (area.label === conversationArea.label) {
+              expect(area.occupantsByID).toHaveLength(1);
+            } else {
+              expect(area.occupantsByID).toHaveLength(0);
+            }
+          });
+        });
+
+        it('should not emit any onConversationUpdate events', async () => {
+          mockListeners.forEach(listener => {
+            testingTown.addTownListener(listener);
+          });
+
+          testingTown.updatePlayerLocation(
+            player,
+            TestUtils.userLocation({ x: 12, y: 12, conversationLabel: conversationArea.label }),
+          );
+
+          mockListeners.forEach(listener => {
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledTimes(0);
+            expect(listener.onConversationAreaDestroyed).toHaveBeenCalledTimes(0);
+          });
+        });
+      });
+
+      describe('player leaves a conversation area in which they were the only one left', () => {
+        let conversationArea: ServerConversationArea;
+
+        beforeEach(async () => {
+          // add a conversation area on top of player's position
+          const conversationAreaBox = { x: 10, y: 10, height: 5, width: 5 };
+          conversationArea = TestUtils.createConversationForTesting({
+            boundingBox: conversationAreaBox,
+          });
+          const isConversationAreaAdded = testingTown.addConversationArea(conversationArea);
+          expect(isConversationAreaAdded).toBe(true);
+          expect(conversationArea.occupantsByID).toHaveLength(1);
+
+          // add multiple other conversation areas
+          TestUtils.addConversationAreaToTown(testingTown, { x: 20, y: 10, width: 5, height: 5 });
+          TestUtils.addConversationAreaToTown(testingTown, { x: 30, y: 10, width: 5, height: 5 });
+          TestUtils.addConversationAreaToTown(testingTown, { x: 40, y: 10, width: 5, height: 5 });
+        });
+
+        it('should emit onConversationDelete for the conversation area the player left', async () => {
+          mockListeners.forEach(listener => {
+            testingTown.addTownListener(listener);
+          });
+
+          testingTown.updatePlayerLocation(player, TestUtils.userLocation({}));
+
+          mockListeners.forEach(listener => {
+            expect(listener.onConversationAreaUpdated).toHaveBeenCalledTimes(0);
+            expect(listener.onConversationAreaDestroyed).toHaveBeenCalledTimes(1);
+            expect(listener.onConversationAreaDestroyed).toHaveBeenCalledWith(conversationArea);
+          });
+        });
+
+        it('should delete the conversation area from the list of conversation areas', () => {
+          const prevNumAreas = testingTown.conversationAreas.length;
+          testingTown.updatePlayerLocation(player, TestUtils.userLocation({}));
+          expect(testingTown.conversationAreas).toHaveLength(prevNumAreas - 1);
+          expect(testingTown.conversationAreas).not.toContain(conversationArea);
+        });
+      });
     });
   });
 

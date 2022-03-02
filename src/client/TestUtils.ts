@@ -204,3 +204,13 @@ export async function addNewPlayerToNewArea(
     playerSession,
   };
 }
+
+export function userLocation(params: Partial<UserLocation>): UserLocation {
+  return {
+    moving: params.moving || false,
+    rotation: params.rotation || 'front',
+    x: params.x || 100,
+    y: params.y || 100,
+    conversationLabel: params.conversationLabel,
+  };
+}
