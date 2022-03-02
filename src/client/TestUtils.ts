@@ -33,6 +33,15 @@ export function cleanupSockets(): void {
   }
 }
 
+type CreateSocketClientParms = {
+  socket: Socket;
+  socketConnected: Promise<void>;
+  socketDisconnected: Promise<void>;
+  playerMoved: Promise<RemoteServerPlayer>;
+  newPlayerJoined: Promise<RemoteServerPlayer>;
+  playerDisconnected: Promise<RemoteServerPlayer>;
+};
+
 /**
  * A handy test helper that will create a socket client that is properly configured to connect to the testing server.
  * This function also creates promises that will be resolved only once the socket is connected/disconnected/a player moved/
@@ -49,14 +58,7 @@ export function createSocketClient(
   server: http.Server,
   sessionToken: string,
   coveyTownID: string,
-): {
-  socket: Socket;
-  socketConnected: Promise<void>;
-  socketDisconnected: Promise<void>;
-  playerMoved: Promise<RemoteServerPlayer>;
-  newPlayerJoined: Promise<RemoteServerPlayer>;
-  playerDisconnected: Promise<RemoteServerPlayer>;
-} {
+): CreateSocketClientParms {
   const address = server.address() as AddressInfo;
   const socket = io(`http://localhost:${address.port}`, {
     auth: { token: sessionToken, coveyTownID },
