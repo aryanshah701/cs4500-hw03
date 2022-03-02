@@ -266,6 +266,7 @@ describe('CoveyTownController', () => {
       });
     });
   });
+
   describe('addConversationArea', () => {
     let testingTown: CoveyTownController;
     beforeEach(() => {
@@ -274,8 +275,9 @@ describe('CoveyTownController', () => {
     });
     it('a valid conversation area should be added to the list of conversation areas', () => {
       const newConversationArea = TestUtils.createConversationForTesting();
-      const result = testingTown.addConversationArea(newConversationArea);
-      expect(result).toBe(true);
+      const isConversationAdded = testingTown.addConversationArea(newConversationArea);
+      expect(isConversationAdded).toBe(true);
+
       const areas = testingTown.conversationAreas;
       expect(areas.length).toEqual(1);
       expect(areas[0].label).toEqual(newConversationArea.label);
@@ -283,23 +285,233 @@ describe('CoveyTownController', () => {
       expect(areas[0].boundingBox).toEqual(newConversationArea.boundingBox);
     });
 
-    it('a conversation area without a falsy label should not be added', () => {});
+    it('a conversation area without a falsy label should not be added', () => {
+      const newConversationArea = TestUtils.createConversationForTesting({
+        isTopicUndefined: true,
+      });
+      const isConversationAdded = testingTown.addConversationArea(newConversationArea);
+      expect(isConversationAdded).toBe(false);
+    });
 
-    it('a conversation area with the same label as an existing conversation area should not be added', () => {});
+    it('a conversation area with the same label as an existing conversation area should not be added', () => {
+      // add a new conversation area with a test label and ensure it is added
+      const conversationLabel = 'Test label';
+      const boundingBox1 = { x: 5, y: 5, width: 5, height: 5 };
+      const newConversationArea1 = TestUtils.createConversationForTesting({
+        conversationLabel,
+        boundingBox: boundingBox1,
+      });
 
-    it('a conversation area that overlaps with another conversation area should not be added', () => {});
+      const isConversationAdded1 = testingTown.addConversationArea(newConversationArea1);
+      expect(isConversationAdded1).toBe(true);
+      const areas = testingTown.conversationAreas;
+      expect(areas.length).toBe(1);
+      expect(areas[0].label).toBe(conversationLabel);
 
-    it('a conversation area adjacent to another conversation area can be added', () => {});
+      // ensure another area with the same label cannot be added
+      const boundingBox2 = { x: 50, y: 50, width: 5, height: 5 };
+      const newConversationArea2 = TestUtils.createConversationForTesting({
+        conversationLabel,
+        boundingBox: boundingBox2,
+      });
 
-    it('a player in the bounding box of a new conversation area should be added to the occupants list', () => {});
+      const isConversationAdded2 = testingTown.addConversationArea(newConversationArea2);
+      expect(isConversationAdded2).toBe(false);
+    });
 
-    it('players not int the bounding box of the new conversation area should not be added to the occupant list', () => {});
+    it('a conversation area that is exactly on top of another conversation area should not be added', () => {
+      const boundingBox = { x: 5, y: 5, width: 5, height: 5 };
+      const conversationArea1 = TestUtils.createConversationForTesting({ boundingBox });
 
-    it('players on the edge of the bounding box of the new conversation area should not be added to the occupant list', () => {});
+      const isConversationAdded1 = testingTown.addConversationArea(conversationArea1);
+      expect(isConversationAdded1).toBe(true);
 
-    it('players added to the occupant list of the conversation area should have their activeConversationArea field updated', () => {});
+      const conversationArea2 = TestUtils.createConversationForTesting({ boundingBox });
+      const isConversationAdded2 = testingTown.addConversationArea(conversationArea2);
+      expect(isConversationAdded2).toBe(false);
+    });
 
-    it('onConversationUpdate is emitted for all listeners subscribed to this town', () => {});
+    it('a conversation area that overlaps with another conversation area should not be added', () => {
+      const boundingBox1 = { x: 5, y: 5, width: 5, height: 5 };
+      const conversationArea1 = TestUtils.createConversationForTesting({
+        boundingBox: boundingBox1,
+      });
+
+      const isConversationAdded1 = testingTown.addConversationArea(conversationArea1);
+      expect(isConversationAdded1).toBe(true);
+
+      const boundingBox2 = { x: 2, y: 2, width: 5, height: 5 };
+      const conversationArea2 = TestUtils.createConversationForTesting({
+        boundingBox: boundingBox2,
+      });
+      const isConversationAdded2 = testingTown.addConversationArea(conversationArea2);
+      expect(isConversationAdded2).toBe(false);
+    });
+
+    it('a conversation area adjacent to another conversation area can be added', () => {
+      // x: 2.5 - 7.5, y: 2.5 - 7.5
+      const boundingBox1 = { x: 5, y: 5, width: 5, height: 5 };
+      const conversationArea1 = TestUtils.createConversationForTesting({
+        boundingBox: boundingBox1,
+      });
+
+      const isConversationAdded1 = testingTown.addConversationArea(conversationArea1);
+      expect(isConversationAdded1).toBe(true);
+
+      // x: 7.5 - 12.5, y: 2.5 - 7.5
+      const boundingBox2 = { x: 10, y: 5, width: 5, height: 5 };
+      const conversationArea2 = TestUtils.createConversationForTesting({
+        boundingBox: boundingBox2,
+      });
+      const isConversationAdded2 = testingTown.addConversationArea(conversationArea2);
+      expect(isConversationAdded2).toBe(true);
+    });
+
+    it('a player in the center of bounding box of a new conversation area should be added to the occupants list', async () => {
+      const newConversationAreaBox = { x: 5, y: 5, width: 5, height: 5 };
+
+      // add a new player and move the player to a position
+      const newPlayerSession = await TestUtils.addPlayerToTown(testingTown);
+      TestUtils.movePlayerToBoundingBox(
+        testingTown,
+        newPlayerSession.player,
+        newConversationAreaBox,
+      );
+
+      // add a conversation area on top of the player
+      const newConversationArea = TestUtils.createConversationForTesting({
+        boundingBox: newConversationAreaBox,
+      });
+      const isConversationAdded = testingTown.addConversationArea(newConversationArea);
+      expect(isConversationAdded).toBe(true);
+
+      const areas = testingTown.conversationAreas;
+      expect(areas.length).toBe(1);
+
+      // ensure the player is added to the occupant list
+      const newConversationAreaOccupants = areas[0].occupantsByID;
+      expect(newConversationAreaOccupants.length).toBe(1);
+      expect(newConversationAreaOccupants).toContain(newPlayerSession.player.id);
+    });
+
+    it('a player somewhere in the bounding box of a new conversation area should be added to the occupants list', async () => {
+      const newConversationAreaBox = { x: 5, y: 5, width: 5, height: 5 };
+
+      // add a new player and move the player to somewhere in the conversation area
+      const newPlayerSession = await TestUtils.addPlayerToTown(testingTown);
+      const playerX = newConversationAreaBox.x - newConversationAreaBox.width / 3;
+      const playerY = newConversationAreaBox.y - newConversationAreaBox.height / 3;
+      TestUtils.movePlayerToPosition(testingTown, newPlayerSession.player, playerX, playerY);
+
+      // add a conversation area on top of the player
+      const newConversationArea = TestUtils.createConversationForTesting({
+        boundingBox: newConversationAreaBox,
+      });
+      const isConversationAdded = testingTown.addConversationArea(newConversationArea);
+      expect(isConversationAdded).toBe(true);
+
+      const areas = testingTown.conversationAreas;
+      expect(areas.length).toBe(1);
+
+      // ensure the player is added to the occupant list
+      const newConversationAreaOccupants = areas[0].occupantsByID;
+      expect(newConversationAreaOccupants.length).toBe(1);
+      expect(newConversationAreaOccupants).toContain(newPlayerSession.player.id);
+    });
+
+    it('players not in the bounding box of the new conversation area should not be added to the occupant list', async () => {
+      const newConversationAreaBox = { x: 5, y: 5, width: 5, height: 5 };
+
+      // add a new player and move the player to somewhere out of the conversation area
+      const newPlayerSession = await TestUtils.addPlayerToTown(testingTown);
+      const playerX = newConversationAreaBox.x + newConversationAreaBox.width;
+      const playerY = newConversationAreaBox.y + newConversationAreaBox.height;
+      TestUtils.movePlayerToPosition(testingTown, newPlayerSession.player, playerX, playerY);
+
+      // add a conversation area on top of the player
+      const newConversationArea = TestUtils.createConversationForTesting({
+        boundingBox: newConversationAreaBox,
+      });
+      const isConversationAdded = testingTown.addConversationArea(newConversationArea);
+      expect(isConversationAdded).toBe(true);
+
+      const areas = testingTown.conversationAreas;
+      expect(areas.length).toBe(1);
+
+      // ensure the player is not added to the occupant list
+      const newConversationAreaOccupants = areas[0].occupantsByID;
+      expect(newConversationAreaOccupants.length).toBe(0);
+    });
+
+    it('players on the edge of the bounding box of the new conversation area should not be added to the occupant list', async () => {
+      const newConversationAreaBox = { x: 5, y: 5, width: 5, height: 5 };
+
+      // add a new player and move the player to the edge of the conversation area
+      const newPlayerSession = await TestUtils.addPlayerToTown(testingTown);
+      const playerX = newConversationAreaBox.x + newConversationAreaBox.width / 2;
+      const playerY = newConversationAreaBox.y + newConversationAreaBox.height / 3;
+      TestUtils.movePlayerToPosition(testingTown, newPlayerSession.player, playerX, playerY);
+
+      // add a conversation area on top of the player
+      const newConversationArea = TestUtils.createConversationForTesting({
+        boundingBox: newConversationAreaBox,
+      });
+      const isConversationAdded = testingTown.addConversationArea(newConversationArea);
+      expect(isConversationAdded).toBe(true);
+
+      const areas = testingTown.conversationAreas;
+      expect(areas.length).toBe(1);
+
+      // ensure the player is not added to the occupant list
+      const newConversationAreaOccupants = areas[0].occupantsByID;
+      expect(newConversationAreaOccupants.length).toBe(0);
+    });
+
+    it('players added to the occupant list of the conversation area should have their activeConversationArea field updated', async () => {
+      const newConversationAreaBox = { x: 5, y: 5, width: 5, height: 5 };
+
+      // add a new player and move the player to a position
+      const newPlayerSession = await TestUtils.addPlayerToTown(testingTown);
+      TestUtils.movePlayerToBoundingBox(
+        testingTown,
+        newPlayerSession.player,
+        newConversationAreaBox,
+      );
+
+      // add a conversation area on top of the player
+      const newConversationArea = TestUtils.createConversationForTesting({
+        boundingBox: newConversationAreaBox,
+      });
+      const isConversationAdded = testingTown.addConversationArea(newConversationArea);
+      expect(isConversationAdded).toBe(true);
+
+      const areas = testingTown.conversationAreas;
+      expect(areas.length).toBe(1);
+
+      // ensure the player's active conversation is the new conversationa area
+      expect(newPlayerSession.player.activeConversationArea).toBeDefined();
+      expect(newPlayerSession.player.activeConversationArea?.label).toBe(areas[0].label);
+    });
+
+    it('onConversationUpdate is emitted for all listeners subscribed to this town when a new conversation area is added', () => {
+      const mockListeners = [
+        mock<CoveyTownListener>(),
+        mock<CoveyTownListener>(),
+        mock<CoveyTownListener>(),
+      ];
+      mockListeners.forEach(listener => {
+        testingTown.addTownListener(listener);
+      });
+
+      const newConversationArea = TestUtils.createConversationForTesting();
+      const isConversationAdded = testingTown.addConversationArea(newConversationArea);
+      expect(isConversationAdded).toBe(true);
+
+      mockListeners.forEach(listener => {
+        expect(listener.onConversationAreaUpdated).toHaveBeenCalledTimes(1);
+        expect(listener.onConversationAreaUpdated).toHaveBeenCalledWith(newConversationArea);
+      });
+    });
   });
   describe('updatePlayerLocation', () => {
     let testingTown: CoveyTownController;
@@ -368,7 +580,9 @@ describe('CoveyTownController', () => {
       const newConversationAreaBox = { x: 10, y: 10, height: 5, width: 5 };
       const res = await TestUtils.addNewPlayerToNewArea(testingTown, newConversationAreaBox);
 
-      expect(res.conversationArea).toBeDefined();
+      if (!res.conversationArea) {
+        fail('Failed to created the conversation area.');
+      }
 
       newPlayerSession = res.playerSession;
       newConversationArea = res.conversationArea;
@@ -402,10 +616,12 @@ describe('CoveyTownController', () => {
         // create a conversation area with another new player
         const newConversationAreaBox = { x: 100, y: 100, height: 5, width: 5 };
         const res = await TestUtils.addNewPlayerToNewArea(testingTown, newConversationAreaBox);
-        expect(res).toBeDefined();
 
         const newPlayerSession2 = res.playerSession;
         const newConversationArea2 = res.conversationArea;
+        if (!newConversationArea2) {
+          fail('Failed to create conversation area.');
+        }
 
         const playerId1 = newPlayerSession.player.id;
         const playerId2 = newPlayerSession2.player.id;

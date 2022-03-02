@@ -111,12 +111,13 @@ export function createConversationForTesting(params?: {
   conversationLabel?: string;
   conversationTopic?: string;
   boundingBox?: BoundingBox;
+  isTopicUndefined?: boolean;
 }): ServerConversationArea {
   return {
     boundingBox: params?.boundingBox || { height: 100, width: 100, x: 400, y: 400 },
     label: params?.conversationLabel || nanoid(),
     occupantsByID: [],
-    topic: params?.conversationTopic || nanoid(),
+    topic: params?.isTopicUndefined ? '' : params?.conversationTopic || nanoid(),
   };
 }
 
@@ -128,7 +129,7 @@ export async function addPlayerToTown(testingTown: CoveyTownController): Promise
 
 export function addConversationAreaToTown(
   testingTown: CoveyTownController,
-  boundingBox: BoundingBox,
+  boundingBox?: BoundingBox,
 ): ServerConversationArea | undefined {
   const newConversationArea = createConversationForTesting({
     boundingBox,
@@ -143,20 +144,31 @@ export function addConversationAreaToTown(
   return newConversationArea;
 }
 
-export async function movePlayerToBoundingBox(
+export async function movePlayerToPosition(
   testingTown: CoveyTownController,
   player: Player,
+  x: number,
+  y: number,
   conversationArea?: ServerConversationArea | undefined,
 ): Promise<void> {
   const newLocation: UserLocation = {
     moving: false,
     rotation: 'front',
-    x: conversationArea.boundingBox.x,
-    y: conversationArea?.boundingBox.y,
+    x,
+    y,
     conversationLabel: conversationArea?.label,
   };
 
   testingTown.updatePlayerLocation(player, newLocation);
+}
+
+export async function movePlayerToBoundingBox(
+  testingTown: CoveyTownController,
+  player: Player,
+  boundingBox: BoundingBox,
+  conversationArea?: ServerConversationArea | undefined,
+): Promise<void> {
+  movePlayerToPosition(testingTown, player, boundingBox.x, boundingBox.y, conversationArea);
 }
 
 type NewPlayerAndConversationArea = {
@@ -177,7 +189,13 @@ export async function addNewPlayerToNewArea(
     };
   }
 
-  movePlayerToBoundingBox(testingTown, playerSession.player, conversationArea);
+  // move player inside the new conversation area
+  movePlayerToBoundingBox(
+    testingTown,
+    playerSession.player,
+    conversationArea.boundingBox,
+    conversationArea,
+  );
 
   return {
     conversationArea,
