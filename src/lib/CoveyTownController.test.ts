@@ -272,7 +272,7 @@ describe('CoveyTownController', () => {
       const townName = `addConversationArea test town ${nanoid()}`;
       testingTown = new CoveyTownController(townName, false);
     });
-    it('should add the conversation area to the list of conversation areas', () => {
+    it('a valid conversation area should be added to the list of conversation areas', () => {
       const newConversationArea = TestUtils.createConversationForTesting();
       const result = testingTown.addConversationArea(newConversationArea);
       expect(result).toBe(true);
@@ -282,6 +282,24 @@ describe('CoveyTownController', () => {
       expect(areas[0].topic).toEqual(newConversationArea.topic);
       expect(areas[0].boundingBox).toEqual(newConversationArea.boundingBox);
     });
+
+    it('a conversation area without a falsy label should not be added', () => {});
+
+    it('a conversation area with the same label as an existing conversation area should not be added', () => {});
+
+    it('a conversation area that overlaps with another conversation area should not be added', () => {});
+
+    it('a conversation area adjacent to another conversation area can be added', () => {});
+
+    it('a player in the bounding box of a new conversation area should be added to the occupants list', () => {});
+
+    it('players not int the bounding box of the new conversation area should not be added to the occupant list', () => {});
+
+    it('players on the edge of the bounding box of the new conversation area should not be added to the occupant list', () => {});
+
+    it('players added to the occupant list of the conversation area should have their activeConversationArea field updated', () => {});
+
+    it('onConversationUpdate is emitted for all listeners subscribed to this town', () => {});
   });
   describe('updatePlayerLocation', () => {
     let testingTown: CoveyTownController;
@@ -350,6 +368,8 @@ describe('CoveyTownController', () => {
       const newConversationAreaBox = { x: 10, y: 10, height: 5, width: 5 };
       const res = await TestUtils.addNewPlayerToNewArea(testingTown, newConversationAreaBox);
 
+      expect(res.conversationArea).toBeDefined();
+
       newPlayerSession = res.playerSession;
       newConversationArea = res.conversationArea;
     });
@@ -381,8 +401,11 @@ describe('CoveyTownController', () => {
       it('conversation areas remain unchanged when a player is removed but they are not a players active conversation area', async () => {
         // create a conversation area with another new player
         const newConversationAreaBox = { x: 100, y: 100, height: 5, width: 5 };
-        const { playerSession: newPlayerSession2, conversationArea: newConversationArea2 } =
-          await TestUtils.addNewPlayerToNewArea(testingTown, newConversationAreaBox);
+        const res = await TestUtils.addNewPlayerToNewArea(testingTown, newConversationAreaBox);
+        expect(res).toBeDefined();
+
+        const newPlayerSession2 = res.playerSession;
+        const newConversationArea2 = res.conversationArea;
 
         const playerId1 = newPlayerSession.player.id;
         const playerId2 = newPlayerSession2.player.id;

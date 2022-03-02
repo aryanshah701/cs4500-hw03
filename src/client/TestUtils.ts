@@ -126,15 +126,19 @@ export async function addPlayerToTown(testingTown: CoveyTownController): Promise
   return playerSession;
 }
 
-export async function addConversationAreaToTown(
+export function addConversationAreaToTown(
   testingTown: CoveyTownController,
   boundingBox: BoundingBox,
-): Promise<ServerConversationArea> {
+): ServerConversationArea | undefined {
   const newConversationArea = createConversationForTesting({
     boundingBox,
   });
 
-  testingTown.addConversationArea(newConversationArea);
+  const result = testingTown.addConversationArea(newConversationArea);
+
+  if (!result) {
+    return undefined;
+  }
 
   return newConversationArea;
 }
@@ -142,14 +146,13 @@ export async function addConversationAreaToTown(
 export async function movePlayerToBoundingBox(
   testingTown: CoveyTownController,
   player: Player,
-  boundingBox: BoundingBox,
-  conversationArea?: ServerConversationArea,
+  conversationArea?: ServerConversationArea | undefined,
 ): Promise<void> {
   const newLocation: UserLocation = {
     moving: false,
     rotation: 'front',
-    x: boundingBox.x,
-    y: boundingBox.y,
+    x: conversationArea.boundingBox.x,
+    y: conversationArea?.boundingBox.y,
     conversationLabel: conversationArea?.label,
   };
 
@@ -158,25 +161,26 @@ export async function movePlayerToBoundingBox(
 
 type NewPlayerAndConversationArea = {
   playerSession: PlayerSession;
-  conversationArea: ServerConversationArea;
+  conversationArea?: ServerConversationArea;
 };
 
 export async function addNewPlayerToNewArea(
   testingTown: CoveyTownController,
   newConversationAreaBox: BoundingBox,
 ): Promise<NewPlayerAndConversationArea> {
-  const conversationArea = await addConversationAreaToTown(testingTown, newConversationAreaBox);
   const playerSession = await addPlayerToTown(testingTown);
 
-  movePlayerToBoundingBox(
-    testingTown,
-    playerSession.player,
-    newConversationAreaBox,
-    conversationArea,
-  );
+  const conversationArea = addConversationAreaToTown(testingTown, newConversationAreaBox);
+  if (!conversationArea) {
+    return {
+      playerSession,
+    };
+  }
+
+  movePlayerToBoundingBox(testingTown, playerSession.player, conversationArea);
 
   return {
-    playerSession,
     conversationArea,
+    playerSession,
   };
 }
