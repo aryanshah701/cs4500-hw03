@@ -4,13 +4,15 @@ import http from 'http';
 import { nanoid } from 'nanoid';
 import { AddressInfo } from 'net';
 import { mock, mockReset } from 'jest-mock-extended';
+import { AxiosError } from 'axios';
 import CoveyTownController from '../lib/CoveyTownController';
 import CoveyTownsStore from '../lib/CoveyTownsStore';
 import addTownRoutes from '../router/towns';
 import * as requestHandlers from '../requestHandlers/CoveyTownRequestHandlers';
 import { createConversationForTesting } from './TestUtils';
-import TownsServiceClient, { ServerConversationArea } from './TownsServiceClient';
+import TownsServiceClient, { ServerConversationArea, TownJoinResponse } from './TownsServiceClient';
 import PlayerSession from '../types/PlayerSession';
+import * as utils from '../Utils';
 
 type TestTownData = {
   friendlyName: string;
@@ -22,6 +24,9 @@ type TestTownData = {
 describe('Create Conversation Area API', () => {
   let server: http.Server;
   let apiClient: TownsServiceClient;
+  let testingTown: TestTownData;
+  let testingSession: TownJoinResponse;
+  let mockConversationAreaCreateHandler: jest.SpyInstance;
 
   async function createTownForTesting(
     friendlyNameToUse?: string,
@@ -43,6 +48,18 @@ describe('Create Conversation Area API', () => {
     };
   }
 
+  beforeEach(async () => {
+    testingTown = await createTownForTesting(undefined, true);
+    testingSession = await apiClient.joinTown({
+      userName: nanoid(),
+      coveyTownID: testingTown.coveyTownID,
+    });
+  });
+
+  afterEach(() => {
+    mockConversationAreaCreateHandler.mockReset();
+  });
+
   beforeAll(async () => {
     const app = Express();
     app.use(CORS());
@@ -58,17 +75,54 @@ describe('Create Conversation Area API', () => {
   afterAll(async () => {
     await server.close();
   });
-  it('Executes without error when creating a new conversation', async () => {
-    const testingTown = await createTownForTesting(undefined, true);
-    const testingSession = await apiClient.joinTown({
-      userName: nanoid(),
-      coveyTownID: testingTown.coveyTownID,
-    });
-    await apiClient.createConversationArea({
-      conversationArea: createConversationForTesting(),
+
+  it('Executes without error and calls the conversationAreaCreateHandler', async () => {
+    mockConversationAreaCreateHandler = jest.spyOn(
+      requestHandlers,
+      'conversationAreaCreateHandler',
+    );
+
+    const conversationArea = createConversationForTesting();
+
+    const requestData = {
+      conversationArea,
       coveyTownID: testingTown.coveyTownID,
       sessionToken: testingSession.coveySessionToken,
-    });
+    };
+
+    await apiClient.createConversationArea(requestData);
+
+    expect(mockConversationAreaCreateHandler).toHaveBeenCalledTimes(1);
+    expect(mockConversationAreaCreateHandler).toHaveBeenCalledWith(requestData);
+  });
+
+  it('Throws an internal server error when conversationAreaCreateHandler throws 500 error with error message', async () => {
+    mockConversationAreaCreateHandler = jest
+      .spyOn(requestHandlers, 'conversationAreaCreateHandler')
+      .mockImplementation(() => {
+        throw new Error('Something went wrong');
+      });
+
+    const logError = jest.spyOn(utils, 'logError').mockImplementation(err => err);
+
+    const conversationArea = createConversationForTesting();
+
+    const requestData = {
+      conversationArea,
+      coveyTownID: testingTown.coveyTownID,
+      sessionToken: testingSession.coveySessionToken,
+    };
+
+    try {
+      await apiClient.createConversationArea(requestData);
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      expect(logError).toHaveBeenCalledTimes(1);
+      expect(axiosError.response?.status).toBe(500);
+      expect(axiosError.response?.data.message).toBe(
+        'Internal server error, please see log in server for more details',
+      );
+    }
   });
 });
 describe('conversationAreaCreateHandler', () => {
