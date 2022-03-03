@@ -911,10 +911,9 @@ describe('CoveyTownController', () => {
         let conversationArea: ServerConversationArea;
 
         beforeEach(async () => {
-          // add multiple other conversation areas
+          // add multiple other conversation areas before
           TestUtils.addConversationAreaToTown(testingTown, { x: 20, y: 10, width: 5, height: 5 });
           TestUtils.addConversationAreaToTown(testingTown, { x: 30, y: 10, width: 5, height: 5 });
-          TestUtils.addConversationAreaToTown(testingTown, { x: 40, y: 10, width: 5, height: 5 });
 
           // add a conversation area on top of player's position
           const conversationAreaBox = { x: 10, y: 10, height: 5, width: 5 };
@@ -924,6 +923,10 @@ describe('CoveyTownController', () => {
           const isConversationAreaAdded = testingTown.addConversationArea(conversationArea);
           expect(isConversationAreaAdded).toBe(true);
           expect(conversationArea.occupantsByID).toHaveLength(1);
+
+          // add multiple conversation areas after
+          TestUtils.addConversationAreaToTown(testingTown, { x: 40, y: 10, width: 5, height: 5 });
+          TestUtils.addConversationAreaToTown(testingTown, { x: 50, y: 10, width: 5, height: 5 });
         });
 
         it('should emit onConversationDelete for the conversation area the player left', async () => {
