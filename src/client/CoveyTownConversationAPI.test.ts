@@ -73,6 +73,7 @@ describe('Create Conversation Area API', () => {
   });
 
   afterAll(async () => {
+    mockConversationAreaCreateHandler.mockRestore();
     await server.close();
   });
 
