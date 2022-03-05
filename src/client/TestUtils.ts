@@ -123,12 +123,24 @@ export function createConversationForTesting(params?: {
   };
 }
 
+/**
+ * Create a new player with and add the player to the given town.
+ *
+ * @param testingTown the town to add the player into
+ */
 export async function addPlayerToTown(testingTown: CoveyTownController): Promise<PlayerSession> {
   const player = new Player(nanoid());
   const playerSession = await testingTown.addPlayer(player);
   return playerSession;
 }
 
+/**
+ * Create a new conversation area and add the conversation area to the given
+ * town.
+ *
+ * @param testingTown the town to add the conversation area into
+ * @param boundingBox the bounding box of the new conversation area
+ */
 export function addConversationAreaToTown(
   testingTown: CoveyTownController,
   boundingBox?: BoundingBox,
@@ -146,6 +158,14 @@ export function addConversationAreaToTown(
   return newConversationArea;
 }
 
+/**
+ * Move a player in a town to a given location.
+ * @param testingTown the town to move the player in
+ * @param player the player to move
+ * @param x the new x position of the player
+ * @param y the new y position of the player
+ * @param conversationArea the conversation area the player is in now
+ */
 export async function movePlayerToPosition(
   testingTown: CoveyTownController,
   player: Player,
@@ -164,6 +184,13 @@ export async function movePlayerToPosition(
   testingTown.updatePlayerLocation(player, newLocation);
 }
 
+/**
+ * Move the player in a town to the center of the given bounding box.
+ * @param testingTown the town the player is in
+ * @param player the player to move
+ * @param boundingBox the bounding box to move the player into
+ * @param conversationArea the conversation area the player may be in
+ */
 export async function movePlayerToBoundingBox(
   testingTown: CoveyTownController,
   player: Player,
@@ -178,6 +205,13 @@ type NewPlayerAndConversationArea = {
   conversationArea?: ServerConversationArea;
 };
 
+/**
+ * Add a new player in a town to a new conversation area with the given bounding
+ * box.
+ *
+ * @param testingTown the town to add the new player and bounding box
+ * @param newConversationAreaBox the new conversation area's bounding box
+ */
 export async function addNewPlayerToNewArea(
   testingTown: CoveyTownController,
   newConversationAreaBox: BoundingBox,
@@ -205,6 +239,12 @@ export async function addNewPlayerToNewArea(
   };
 }
 
+/**
+ * Create a user location with the given parital location params. For params not
+ * given use default values.
+ *
+ * @param params optional location params to use instead of the defaults
+ */
 export function userLocation(params: Partial<UserLocation>): UserLocation {
   return {
     moving: params.moving || false,

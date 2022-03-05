@@ -273,6 +273,7 @@ describe('CoveyTownController', () => {
       const townName = `addConversationArea test town ${nanoid()}`;
       testingTown = new CoveyTownController(townName, false);
     });
+
     it('a valid conversation area should be added to the list of conversation areas', () => {
       const newConversationArea = TestUtils.createConversationForTesting();
       const isConversationAdded = testingTown.addConversationArea(newConversationArea);
